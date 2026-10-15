@@ -8,7 +8,7 @@ NXV_API_KEY = "YOUR_NEW_API_KEY_HERE"
 NXV_BASE_URL = "https://nxv-sms.vercel.app"
 
 # আপনার টেলিগ্রাম বটের টোকেন
-TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+TELEGRAM_BOT_TOKEN = "8862493248:AAHEaG41gaSA2ro13dpoJg7l0DN7fqiIM9k"
 
 # ==============================================
 
