@@ -23,11 +23,9 @@ from telegram import (
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 
 # ==================== LOCAL CONFIGURATION ====================
-# This is the complete single-file bot. Replace the two placeholders below.
+# This is the complete single-file bot.
 # Never share this file after putting real credentials in it.
 CONFIG_BOT_TOKEN = "8862493248:AAHEaG41gaSA2ro13dpoJg7l0DN7fqiIM9k"
-CONFIG_ZENEX_API_KEY = "ZNX_PJVG9XBZ6NBSLIAIK884NZ4I"
-CONFIG_ZENEX_BASE_URL = "https://api.zenexnetwork.com"
 CONFIG_ADMIN_ID = 1849126202
 CONFIG_OTP_GROUP_ID = -1003997282815
 
@@ -44,8 +42,6 @@ except ImportError:
 
 # ==================== CONFIG SECTION ====================
 
-# Credentials are configured above in this same file.
-# Environment variables override these values when provided.
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip() or CONFIG_BOT_TOKEN.strip()
 USER_DATA_FILE = "users.json"
 PAID_SMS_FILE = "paid_sms.json"
@@ -60,8 +56,6 @@ SETTINGS_FILE = "settings.json"
 BOT_USERNAME = None  # set at runtime via post_init
 
 # ==================== ADMIN CONFIGURATION ====================
-# Set the primary admin ID only here.
-# Additional admins can still be added from the Bot Settings menu.
 ADMIN_ID = int(os.getenv("ADMIN_ID", str(CONFIG_ADMIN_ID or "1849126202")))
 ADMINS = [ADMIN_ID]
 
@@ -226,9 +220,6 @@ def load_settings():
     if _settings_cache is not None:
         return _settings_cache
     default = {
-        "active_panel": os.getenv("ACTIVE_PANEL", "zenex").strip().lower(),  # "zenex" or "nxv"
-        "zenex_api_key": os.getenv("ZENEX_API_KEY", "").strip() or CONFIG_ZENEX_API_KEY.strip(),
-        "zenex_base_url": os.getenv("ZENEX_BASE_URL", CONFIG_ZENEX_BASE_URL),
         "nxv_api_key": os.getenv("NXV_API_KEY", "").strip() or CONFIG_NXV_API_KEY.strip(),
         "nxv_base_url": os.getenv("NXV_BASE_URL", CONFIG_NXV_BASE_URL),
         "panel_url": f"https://t.me/nhbdnumber2_bot?start={ADMIN_ID}",
@@ -259,6 +250,10 @@ def load_settings():
         for k, v in default.items():
             if k not in data:
                 data[k] = v; updated = True
+        # Clean up old zenex keys if they exist
+        for old_key in ("active_panel", "zenex_api_key", "zenex_base_url"):
+            if old_key in data:
+                del data[old_key]; updated = True
         if updated:
             with open(SETTINGS_FILE, "w") as f:
                 json.dump(data, f, indent=4)
@@ -280,66 +275,33 @@ def clean_base_url(url):
     return url.rstrip('/')
 
 def get_api_credentials():
-    """Return (api_key, base_url, panel_name) for the currently active panel."""
+    """Return (api_key, base_url) for the NXV panel."""
     settings = load_settings()
-    active = str(settings.get("active_panel", "zenex")).strip().lower()
-
-    if active == "nxv":
-        env_key = os.getenv("NXV_API_KEY", "").strip() or CONFIG_NXV_API_KEY.strip()
-        cfg_key = str(settings.get("nxv_api_key", "")).strip()
-        api_key = env_key or cfg_key
-        base_url = clean_base_url(settings.get("nxv_base_url", CONFIG_NXV_BASE_URL))
-        return api_key, base_url, "nxv"
-
-    # default: zenex
-    env_key = os.getenv("ZENEX_API_KEY", "").strip() or CONFIG_ZENEX_API_KEY.strip()
-    cfg_key = str(settings.get("zenex_api_key", "")).strip()
+    env_key = os.getenv("NXV_API_KEY", "").strip() or CONFIG_NXV_API_KEY.strip()
+    cfg_key = str(settings.get("nxv_api_key", "")).strip()
     api_key = env_key or cfg_key
-    base_url = clean_base_url(settings.get("zenex_base_url", "https://api.zenexnetwork.com"))
-    return api_key, base_url, "zenex"
+    base_url = clean_base_url(settings.get("nxv_base_url", CONFIG_NXV_BASE_URL))
+    return api_key, base_url
 
-
-def get_api_urls(base_url, panel=None):
-    """Return the endpoint map for the given panel.
-    When panel is None, the active panel from settings is used."""
-    if panel is None:
-        panel = str(load_settings().get("active_panel", "zenex")).strip().lower()
-
+def get_api_urls(base_url):
+    """Return NXV endpoint map."""
     base = str(base_url).strip().rstrip('/')
-
-    if panel == "nxv":
-        return {
-            "getnum":      f"{base}/get-number",
-            "liveaccess":  f"{base}/active-rangre",
-            "otp":         f"{base}/get-otp",
-            "cancel":      f"{base}/cancel-number",
-            "balance":     f"{base}/balance",
-        }
-
-    # Zenex defaults
     return {
-        "getnum":     f"{base}/v1/getnum",
-        "liveaccess": f"{base}/v1/active-ranges",
-        "otp":        f"{base}/v1/numsuccess/info",
+        "getnum":      f"{base}/get-number",
+        "liveaccess":  f"{base}/active-rangre",
+        "otp":         f"{base}/get-otp",
+        "cancel":      f"{base}/cancel-number",
+        "balance":     f"{base}/balance",
     }
 
-
-def get_api_headers(api_key, panel=None):
-    """Return the HTTP headers used by the given panel."""
-    if panel is None:
-        panel = str(load_settings().get("active_panel", "zenex")).strip().lower()
-
-    if panel == "nxv":
-        # NXV expects Authorization: Bearer <key> and X-API-Key.
-        return {
-            "Authorization": f"Bearer {api_key}",
-            "X-API-Key": api_key,
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
-
-    # Zenex uses a single custom header.
-    return {"mapikey": api_key}
+def get_api_headers(api_key):
+    """Return NXV headers."""
+    return {
+        "Authorization": f"Bearer {api_key}",
+        "X-API-Key": api_key,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
 
 # ==================== WELCOME MESSAGE CONFIGURATION ====================
 WELCOME_MESSAGE = """✨ 𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗧𝗢 NHBD BOT🚀 ✨ 
@@ -355,8 +317,8 @@ MIN_WITHDRAW = 50
 MAX_WITHDRAW = 10000
 
 # ==================== SUPPORT & DEVELOPER LINKS ====================
-SUPPORT_LINK = "https://t.me/noobxvau"      # আপনার সাপোর্ট লিংক দিন
-DEVELOPER_LINK = "https://t.me/noobxvau"          # আপনার ডেভেলপার লিংক দিন
+SUPPORT_LINK = "https://t.me/noobxvau"
+DEVELOPER_LINK = "https://t.me/noobxvau"
 
 request_queue = asyncio.Queue()
 MAX_WORKERS = max(1, int(os.getenv("MAX_WORKERS", "20")))
@@ -373,12 +335,11 @@ last_range = {}
 CHECK_INTERVAL = 1.5
 number_assignment_lock = asyncio.Lock()
 
-# ==================== ZENEXA RANGES CACHE ====================
+# ==================== RANGES CACHE ====================
 _ranges_cache = {"data": None, "updated_at": 0.0, "fetching": False}
 
 def get_app_emoji_id(app_name):
     n = app_name.lower()
-    # Ordered: longer/more-specific names first to avoid partial-match errors
     SERVICE_EMOJI_MAP = [
         ("whatsapp business", "5336814486701514414"),
         ("whatsapp",          "5334759662677957452"),
@@ -464,11 +425,11 @@ def make_bold_text(text):
 
 async def fetch_top55_ranges_by_app():
     settings = load_settings()
-    api_key, base_url, panel = get_api_credentials()
+    api_key, base_url = get_api_credentials()
     allowed = {s.lower() for s in settings.get("allowed_services",
         ["Instagram","Facebook","WhatsApp","TikTok","Telegram","Discord","PayPal","Imo"])}
-    urls = get_api_urls(base_url, panel)
-    headers = get_api_headers(api_key, panel)
+    urls = get_api_urls(base_url)
+    headers = get_api_headers(api_key)
     ranges_list = None
     for attempt in range(2):
         try:
@@ -484,8 +445,6 @@ async def fetch_top55_ranges_by_app():
     top = {}
     for obj in ranges_list:
         if isinstance(obj, str):
-            # Some API versions return ranges as strings.  Keep them under
-            # the generic service instead of silently dropping them.
             rng = obj.strip()
             service = "Unknown"
         elif isinstance(obj, dict):
@@ -504,8 +463,6 @@ async def fetch_top55_ranges_by_app():
         if not rng or not re.search(r"\d", rng):
             continue
         clean = get_clean_app_name(str(service))
-        # Unknown is useful for custom ranges, but configured service filters
-        # should still hide unrelated named services.
         if clean.lower() not in allowed and clean != "Unknown":
             continue
         if clean not in top:
@@ -525,14 +482,12 @@ def extract_active_ranges(payload):
     for key in (
         "active_ranges", "activeRanges", "available_ranges",
         "availableRanges", "ranges", "range_list",
-        # NXV specific
         "activeRanges", "data", "result",
     ):
         value = payload.get(key)
         if isinstance(value, list):
             return value
 
-    # Newer responses may wrap the same object in data/result/response.
     for key in ("data", "result", "response", "payload"):
         value = payload.get(key)
         if isinstance(value, (dict, list)):
@@ -540,7 +495,6 @@ def extract_active_ranges(payload):
             if nested is not None:
                 return nested
 
-    # A few versions return {"WhatsApp": ["880XXX", ...]}.
     grouped = []
     for service, values in payload.items():
         if not isinstance(values, list):
@@ -969,7 +923,6 @@ def detect_service(full_sms):
     return "SMS SERVICE"
 
 # ==================== KEYBOARDS SECTION ====================
-# Main user menu keyboard
 
 from telegram import KeyboardButton, ReplyKeyboardMarkup
 
@@ -1007,7 +960,6 @@ def main_keyboard(user_id):
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def account_keyboard():
-    """Keyboard for account-related actions grouped under one main-menu button."""
     keyboard = [
         [
             make_reply_btn("BALANCE",        emoji_id="6233367447789899509", style="primary"),
@@ -1032,8 +984,7 @@ def admin_main_keyboard():
          make_reply_btn("SERVICE MANAGEMENT",   emoji_id="5375338737028841420", style="primary")],
         [make_reply_btn("WITHDRAWAL MANAGEMENT", emoji_id="6233367447789899509", style="primary"),
          make_reply_btn("SUPPORT CHAT",           emoji_id="5267294466716244344", style="primary")],
-        [make_reply_btn("SWITCH PANEL",          emoji_id="5341715473882955310", style="primary"),
-         make_reply_btn("⏳ PENDING WITHDRAWALS", emoji_id="6217721388736712699", style="primary")],
+        [make_reply_btn("⏳ PENDING WITHDRAWALS", emoji_id="6217721388736712699", style="primary")],
         [make_reply_btn("BACK TO MAIN",         emoji_id="5267490665117275176", style="primary")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -1068,17 +1019,17 @@ def bot_settings_keyboard():
         [make_reply_btn("SET OTP GROUP LINK", emoji_id="5253742260054409879", style="primary"),
          make_reply_btn("SET FORCE CHANNEL",  emoji_id="5282843764451195532", style="primary")],
         [make_reply_btn("SET OTP CHAT ID",    emoji_id="5231200819986047254", style="primary"),
-         make_reply_btn("ZENEX CONFIG",       emoji_id="5350396951407895212", style="primary")],
+         make_reply_btn("NXV CONFIG",         emoji_id="5350396951407895212", style="primary")],
         [make_reply_btn("BACK TO ADMIN",      emoji_id="5267490665117275176", style="primary")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-def zenex_config_keyboard():
+def nxv_config_keyboard():
     keyboard = [
         [make_reply_btn("SET API KEY",          emoji_id="5397916757333654639", style="primary"),
          make_reply_btn("SET BASE URL",         emoji_id="5253742260054409879", style="primary")],
         [make_reply_btn("SET ALLOWED SERVICES", emoji_id="5341715473882955310", style="primary"),
-         make_reply_btn("VIEW ZENEX CONFIG",    emoji_id="5231200819986047254", style="primary")],
+         make_reply_btn("VIEW NXV CONFIG",      emoji_id="5231200819986047254", style="primary")],
         [make_reply_btn("BACK TO BOT SETTINGS", emoji_id="5267490665117275176", style="primary")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -1437,11 +1388,10 @@ async def show_app_selection(update, context):
         return
     context.user_data.pop("top_ranges_by_app", None)
 
-    # Build combined keyboard: Zenex apps + manual services
     async def _build_full_keyboard(top):
-        zenex_rows = build_app_buttons_from_cache(top)
+        api_rows = build_app_buttons_from_cache(top)
         manual_rows = build_manual_service_buttons()
-        all_rows = zenex_rows + manual_rows
+        all_rows = api_rows + manual_rows
         if not all_rows:
             all_rows = []
         all_rows.append([InlineKeyboardButton("⚙️ CUSTOM RANGE", callback_data="custom_range",
@@ -1477,7 +1427,6 @@ async def show_app_selection(update, context):
                 parse_mode="HTML")
         return
     if not top:
-        # Show only manual services if panel fails
         manual_rows = build_manual_service_buttons()
         if manual_rows:
             manual_rows.append([InlineKeyboardButton("⚙️ CUSTOM RANGE", callback_data="custom_range",
@@ -1504,9 +1453,9 @@ async def monitor_loop(app):
     while True:
         try:
             settings = load_settings()
-            api_key, base_url, panel = get_api_credentials()
-            urls = get_api_urls(base_url, panel)
-            headers = get_api_headers(api_key, panel)
+            api_key, base_url = get_api_credentials()
+            urls = get_api_urls(base_url)
+            headers = get_api_headers(api_key)
             r = await client_async.get(urls["otp"], headers=headers)
             if r.status_code != 200:
                 await asyncio.sleep(5); continue
@@ -1608,20 +1557,16 @@ async def fetch_number_async(range_str):
         return None
 
     try:
-        api_key, base_url, panel = get_api_credentials()
-        urls = get_api_urls(base_url, panel)
-        headers = get_api_headers(api_key, panel)
+        api_key, base_url = get_api_credentials()
+        urls = get_api_urls(base_url)
+        headers = get_api_headers(api_key)
 
-        if panel == "nxv":
-            payload = {"range": range_str, "country": "auto"}
-        else:
-            payload = {"range": range_str, "is_national": False, "remove_plus": False}
+        payload = {"range": range_str, "country": "auto"}
 
         r = await client_async.post(
             urls["getnum"],
             json=payload,
             headers=headers,
-            # Number allocation can take longer than the old 2.2s read timeout.
             timeout=httpx.Timeout(8.0, connect=2.0, read=6.0),
         )
         if not 200 <= r.status_code < 300:
@@ -1677,7 +1622,6 @@ def extract_number_from_payload(payload):
     number_keys = (
         "full_number", "no_plus_number", "phone_number",
         "phone", "mobile", "msisdn", "number", "copy",
-        # NXV specific
         "phoneNumber", "virtualNumber", "did",
     )
     if isinstance(payload, dict):
@@ -1726,8 +1670,6 @@ async def fast_allocate_number(query, context, range_text, sid):
 
     res = None
     clean_num = None
-    # The API can occasionally return a number that was just assigned to
-    # another concurrent request. Fetch again instead of overwriting ownership.
     for _ in range(3):
         res = await fetch_number_async(range_text)
         if not res or not res.get("number"):
@@ -1779,7 +1721,6 @@ async def fast_allocate_number(query, context, range_text, sid):
             f"<b>📩 SMS STATUS: ⏳ WAITING...</b>"
         )
 
-    # ★★★ USER BUTTONS COLOR UPDATED ★★★
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 SAME RANGE", callback_data="same_range", style="primary")],
         [InlineKeyboardButton("📢 OTP GROUP", url="https://t.me/+dhPxM_X5InFhMmE9", style="primary")]
@@ -1863,7 +1804,6 @@ async def process_auto_number(update, context, range_text):
                 f"<b>📩 SMS STATUS: ⏳ WAITING...</b>"
             )
 
-        # ★★★ SAME RANGE BUTTON COLOR IN AUTO NUMBER (FOR CONSISTENCY) ★★★
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 SAME RANGE", callback_data="same_range", style="primary")],
             [InlineKeyboardButton("📢 OTP GROUP", url="https://t.me/+dhPxM_X5InFhMmE9", style="primary")]
@@ -1953,7 +1893,6 @@ async def process_numbers(update_or_query, context, range_text, count):
             f"<b>{sms_status}</b>"
         )
 
-        # ★★★ PROCESS NUMBERS BUTTONS COLOR UPDATE (FOR SINGLE NUMBER) ★★★
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 SAME RANGE", callback_data="same_range", style="primary")],
             [InlineKeyboardButton("📢 OTP GROUP", url="https://t.me/+dhPxM_X5InFhMmE9", style="primary")]
@@ -1975,9 +1914,9 @@ async def perform_otp_search(update, context, target_num):
     status_msg = await update.message.reply_text("🔍 SEARCHING IN SERVER...")
 
     try:
-        api_key, base_url, panel = get_api_credentials()
-        urls = get_api_urls(base_url, panel)
-        headers = get_api_headers(api_key, panel)
+        api_key, base_url = get_api_credentials()
+        urls = get_api_urls(base_url)
+        headers = get_api_headers(api_key)
         r = await client_async.get(urls["otp"], headers=headers)
         res = r.json()
         raw_otps = []
@@ -2534,7 +2473,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # Admin reply by Telegram's native reply action remains supported.
     if is_admin(uid) and update.message.reply_to_message:
         replied_text = update.message.reply_to_message.text or ""
         match = re.search(r"SUPPORT_USER_ID:(\d+)", replied_text)
@@ -2560,7 +2498,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             return
 
-    # User support message: send one message to every configured admin.
     if context.user_data.get("support_mode") and not is_admin(uid):
         context.user_data["support_mode"] = False
         user = update.effective_user
@@ -2623,7 +2560,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # Withdraw flow
     if context.user_data.get("withdraw_mode") == "select_method":
         await withdraw_method_selected(update, context)
         return
@@ -2634,7 +2570,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await withdraw_number_received(update, context)
         return
 
-    # Admin balance
     if context.user_data.get("add_balance_mode") and is_admin(uid):
         if context.user_data.get("pending_add_user"):
             await process_add_balance_amount(update, context)
@@ -2648,7 +2583,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await process_remove_balance_user(update, context)
         return
 
-    # Admin ban/unban
     if context.user_data.get("admin_ban_mode") and is_admin(uid):
         await process_ban_user(update, context)
         return
@@ -2656,7 +2590,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await process_unban_user(update, context)
         return
 
-    # CUSTOM RANGE — user sent a range text
     if context.user_data.get("mode") == "custom_range":
         context.user_data["mode"] = None
         range_text = text.strip().upper()
@@ -2677,20 +2610,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         })
         return
 
-    # Ban check
     if not is_admin(uid) and is_user_banned(uid):
         await update.message.reply_text("🚫 YOU ARE BANNED 🚫", reply_markup=main_keyboard(uid))
         return
 
-    # Cancel
     if text == "CANCEL":
         context.user_data.clear()
         await update.message.reply_text("❌ CANCELLED", reply_markup=main_keyboard(uid))
         return
 
-    # Main menu buttons
     if text == "PROFILE":
-        # Clear any lingering mode so sub-buttons work cleanly
         context.user_data["mode"] = None
         context.user_data["account_menu"] = True
         await update.message.reply_text(
@@ -2748,7 +2677,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await refer_command(update, context)
         return
 
-    # SEARCH OTP
     if text == "SEARCH OTP":
         context.user_data["mode"] = "search_otp"
         await update.message.reply_text("🔍 **ENTER THE NUMBER TO SEARCH OTP:**", parse_mode="Markdown")
@@ -2759,12 +2687,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await request_queue.put({'type': 'search_otp', 'update': update, 'context': context, 'target_num': normalize_number(text)})
         return
 
-    # GET 2FA
     if text == "GET 2FA":
         await get_2fa_code(update, context)
         return
 
-    # GET NUMBER
     if text == "GET NUMBER":
         await show_app_selection(update, context)
         return
@@ -2773,12 +2699,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await process_2fa_key(update, context)
         return
 
-    # LEADERBOARD
     if text == "LEADERBOARD":
         await leaderboard_command(update, context)
         return
 
-    # SUPPORT BUTTON HANDLER
     if text == "SUPPORT":
         if is_admin(uid):
             await update.message.reply_text(
@@ -2798,7 +2722,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Admin panel
     if text == "ADMIN PANEL" and is_admin(uid):
         context.user_data["admin_mode"] = "main"
         await update.message.reply_text(
@@ -2816,7 +2739,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["user_management_mode"] = None
         context.user_data["system_config_mode"] = None
         context.user_data["bot_settings_mode"] = None
-        context.user_data["zenex_config_mode"] = None
+        context.user_data["nxv_config_mode"] = None
         context.user_data["service_mgmt_mode"] = None
         context.user_data["withdrawal_admin_mode"] = None
         context.user_data["admin_mode"] = "main"
@@ -2833,27 +2756,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ==================== SWITCH PANEL ====================
-    if text == "SWITCH PANEL" and is_admin(uid):
-        s = load_settings()
-        current = s.get("active_panel", "zenex")
-        await update.message.reply_text(
-            f"🔄 <b>PANEL SELECTOR</b>\n\n"
-            f"<blockquote>Active panel: <b>{current.upper()}</b></blockquote>\n"
-            f"Select which SMS panel the bot should use:",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    ("✅ " if current == "zenex" else "") + "ZENEX PANEL",
-                    callback_data="set_panel_zenex", style="primary")],
-                [InlineKeyboardButton(
-                    ("✅ " if current == "nxv" else "") + "NXV SMS PANEL",
-                    callback_data="set_panel_nxv", style="primary")],
-                [InlineKeyboardButton("🔙 BACK TO ADMIN", callback_data="set_panel_back", style="primary")],
-            ]),
-        )
-        return
-
     if text == "WITHDRAWAL MANAGEMENT" and context.user_data.get("admin_mode") == "main" and is_admin(uid):
         context.user_data["withdrawal_admin_mode"] = "main"
         await update.message.reply_text(
@@ -2864,7 +2766,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Direct PENDING WITHDRAWALS from admin_main_keyboard (no sub-mode required)
     if text == "⏳ PENDING WITHDRAWALS" and is_admin(uid):
         await show_pending_withdrawals(update, context)
         return
@@ -3000,7 +2901,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await admin_remove_balance_start(update, context)
         return
 
-    # ==================== FIXED BROADCAST (TEXT, PHOTO, VIDEO, FILE, ETC.) ====================
     if text == "SEND MESSAGE TO ALL USERS" and is_admin(uid):
         context.user_data["broadcast_mode"] = True
         await update.message.reply_text(
@@ -3035,14 +2935,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 target_id = int(user_id_str)
                 
-                # টেক্সট মেসেজ
                 if update.message.text:
                     await context.bot.send_message(
                         chat_id=target_id, 
                         text=format_broadcast_caption(update.message.text), 
                         parse_mode="HTML"
                     )
-                # ফটো
                 elif update.message.photo:
                     caption = format_broadcast_caption(update.message.caption) if update.message.caption else None
                     await context.bot.send_photo(
@@ -3051,7 +2949,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         caption=caption,
                         parse_mode="HTML" if caption else None
                     )
-                # ভিডিও
                 elif update.message.video:
                     caption = format_broadcast_caption(update.message.caption) if update.message.caption else None
                     await context.bot.send_video(
@@ -3060,7 +2957,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         caption=caption,
                         parse_mode="HTML" if caption else None
                     )
-                # ডকুমেন্ট (যেকোনো ফাইল)
                 elif update.message.document:
                     caption = format_broadcast_caption(update.message.caption) if update.message.caption else None
                     await context.bot.send_document(
@@ -3069,7 +2965,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         caption=caption,
                         parse_mode="HTML" if caption else None
                     )
-                # অডিও
                 elif update.message.audio:
                     caption = format_broadcast_caption(update.message.caption) if update.message.caption else None
                     await context.bot.send_audio(
@@ -3078,7 +2973,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         caption=caption,
                         parse_mode="HTML" if caption else None
                     )
-                # ভয়েস
                 elif update.message.voice:
                     caption = format_broadcast_caption(update.message.caption) if update.message.caption else None
                     await context.bot.send_voice(
@@ -3087,7 +2981,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         caption=caption,
                         parse_mode="HTML" if caption else None
                     )
-                # অ্যানিমেশন (GIF)
                 elif update.message.animation:
                     caption = format_broadcast_caption(update.message.caption) if update.message.caption else None
                     await context.bot.send_animation(
@@ -3096,13 +2989,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         caption=caption,
                         parse_mode="HTML" if caption else None
                     )
-                # স্টিকার
                 elif update.message.sticker:
                     await context.bot.send_sticker(
                         chat_id=target_id,
                         sticker=update.message.sticker.file_id
                     )
-                # অন্য সব কিছু (ফরোয়ার্ড/কপি)
                 else:
                     try:
                         await context.bot.copy_message(
@@ -3146,19 +3037,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ==================== BOT SETTINGS NAVIGATION ====================
     if text == "BOT SETTINGS" and context.user_data.get("admin_mode") == "main" and is_admin(uid):
         context.user_data["bot_settings_mode"] = "main"
-        context.user_data["zenex_config_mode"] = None
+        context.user_data["nxv_config_mode"] = None
         await update.message.reply_text("⚙️ <b>BOT SETTINGS</b>", parse_mode="HTML", reply_markup=bot_settings_keyboard())
         return
 
     if text == "BACK TO BOT SETTINGS" and is_admin(uid):
         context.user_data["bot_settings_mode"] = "main"
-        context.user_data["zenex_config_mode"] = None
+        context.user_data["nxv_config_mode"] = None
         await update.message.reply_text("⚙️ <b>BOT SETTINGS</b>", parse_mode="HTML", reply_markup=bot_settings_keyboard())
         return
 
-    if text == "ZENEX CONFIG" and context.user_data.get("bot_settings_mode") == "main" and is_admin(uid):
-        context.user_data["zenex_config_mode"] = "main"
-        await update.message.reply_text("📡 <b>ZENEX PANEL CONFIG</b>", parse_mode="HTML", reply_markup=zenex_config_keyboard())
+    if text == "NXV CONFIG" and context.user_data.get("bot_settings_mode") == "main" and is_admin(uid):
+        context.user_data["nxv_config_mode"] = "main"
+        await update.message.reply_text("📡 <b>NXV PANEL CONFIG</b>", parse_mode="HTML", reply_markup=nxv_config_keyboard())
         return
 
     if text == "SERVICE MANAGEMENT" and context.user_data.get("admin_mode") == "main" and is_admin(uid):
@@ -3307,56 +3198,56 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["bot_settings_mode"] = "main"
         return
 
-    # ==================== ZENEX CONFIG HANDLERS ====================
-    if text == "SET API KEY" and context.user_data.get("zenex_config_mode") == "main" and is_admin(uid):
-        context.user_data["zenex_config_mode"] = "set_api_key"
+    # ==================== NXV CONFIG HANDLERS ====================
+    if text == "SET API KEY" and context.user_data.get("nxv_config_mode") == "main" and is_admin(uid):
+        context.user_data["nxv_config_mode"] = "set_api_key"
         s = load_settings()
-        cur = s.get("zenex_api_key", "Not set")
+        cur = s.get("nxv_api_key", "Not set")
         await update.message.reply_text(
-            f"🔑 <b>SET ZENEX API KEY</b>\n\n<blockquote>Current: <code>{cur[:20]}...</code></blockquote>\n\nSend new API key:",
+            f"🔑 <b>SET NXV API KEY</b>\n\n<blockquote>Current: <code>{cur[:20]}...</code></blockquote>\n\nSend new API key:",
             parse_mode="HTML", reply_markup=cancel_keyboard())
         return
 
-    if context.user_data.get("zenex_config_mode") == "set_api_key" and is_admin(uid):
+    if context.user_data.get("nxv_config_mode") == "set_api_key" and is_admin(uid):
         s = load_settings()
-        s["zenex_api_key"] = text.strip()
+        s["nxv_api_key"] = text.strip()
         save_settings(s)
         await update.message.reply_text(
-            f"✅ <b>ZENEX API KEY UPDATED!</b>\n<blockquote><code>{html.escape(text.strip()[:20])}...</code></blockquote>",
-            parse_mode="HTML", reply_markup=zenex_config_keyboard())
-        context.user_data["zenex_config_mode"] = "main"
+            f"✅ <b>NXV API KEY UPDATED!</b>\n<blockquote><code>{html.escape(text.strip()[:20])}...</code></blockquote>",
+            parse_mode="HTML", reply_markup=nxv_config_keyboard())
+        context.user_data["nxv_config_mode"] = "main"
         return
 
-    if text == "SET BASE URL" and context.user_data.get("zenex_config_mode") == "main" and is_admin(uid):
-        context.user_data["zenex_config_mode"] = "set_base_url"
+    if text == "SET BASE URL" and context.user_data.get("nxv_config_mode") == "main" and is_admin(uid):
+        context.user_data["nxv_config_mode"] = "set_base_url"
         s = load_settings()
-        cur = s.get("zenex_base_url", "Not set")
+        cur = s.get("nxv_base_url", "Not set")
         await update.message.reply_text(
-            f"🌐 <b>SET ZENEX BASE URL</b>\n\n<blockquote>Current: <code>{cur}</code></blockquote>\n\nSend new base URL (e.g. https://api.zenexnetwork.com):",
+            f"🌐 <b>SET NXV BASE URL</b>\n\n<blockquote>Current: <code>{cur}</code></blockquote>\n\nSend new base URL (e.g. https://nxv-sms.vercel.app):",
             parse_mode="HTML", reply_markup=cancel_keyboard())
         return
 
-    if context.user_data.get("zenex_config_mode") == "set_base_url" and is_admin(uid):
+    if context.user_data.get("nxv_config_mode") == "set_base_url" and is_admin(uid):
         s = load_settings()
-        s["zenex_base_url"] = text.strip().rstrip("/")
+        s["nxv_base_url"] = text.strip().rstrip("/")
         save_settings(s)
         await update.message.reply_text(
-            f"✅ <b>BASE URL UPDATED!</b>\n<blockquote><code>{html.escape(s['zenex_base_url'])}</code></blockquote>",
-            parse_mode="HTML", reply_markup=zenex_config_keyboard())
-        context.user_data["zenex_config_mode"] = "main"
+            f"✅ <b>BASE URL UPDATED!</b>\n<blockquote><code>{html.escape(s['nxv_base_url'])}</code></blockquote>",
+            parse_mode="HTML", reply_markup=nxv_config_keyboard())
+        context.user_data["nxv_config_mode"] = "main"
         return
 
-    if text == "SET ALLOWED SERVICES" and context.user_data.get("zenex_config_mode") == "main" and is_admin(uid):
-        context.user_data["zenex_config_mode"] = "set_services"
+    if text == "SET ALLOWED SERVICES" and context.user_data.get("nxv_config_mode") == "main" and is_admin(uid):
+        context.user_data["nxv_config_mode"] = "set_services"
         s = load_settings()
         cur = ", ".join(s.get("allowed_services", []))
         await update.message.reply_text(
-            f"📋 <b>SET ALLOWED ZENEX SERVICES</b>\n\n<blockquote>Current:\n<code>{cur}</code></blockquote>\n\n"
+            f"📋 <b>SET ALLOWED NXV SERVICES</b>\n\n<blockquote>Current:\n<code>{cur}</code></blockquote>\n\n"
             f"Send comma-separated list:\n<i>e.g. Instagram,Facebook,WhatsApp,TikTok</i>",
             parse_mode="HTML", reply_markup=cancel_keyboard())
         return
 
-    if context.user_data.get("zenex_config_mode") == "set_services" and is_admin(uid):
+    if context.user_data.get("nxv_config_mode") == "set_services" and is_admin(uid):
         services = [x.strip() for x in text.split(",") if x.strip()]
         s = load_settings()
         s["allowed_services"] = services
@@ -3366,20 +3257,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         svc_text = "\n".join(f"• {sv}" for sv in services)
         await update.message.reply_text(
             f"✅ <b>ALLOWED SERVICES UPDATED!</b>\n\n<blockquote>{svc_text}</blockquote>",
-            parse_mode="HTML", reply_markup=zenex_config_keyboard())
-        context.user_data["zenex_config_mode"] = "main"
+            parse_mode="HTML", reply_markup=nxv_config_keyboard())
+        context.user_data["nxv_config_mode"] = "main"
         return
 
-    if text == "VIEW ZENEX CONFIG" and context.user_data.get("zenex_config_mode") == "main" and is_admin(uid):
+    if text == "VIEW NXV CONFIG" and context.user_data.get("nxv_config_mode") == "main" and is_admin(uid):
         s = load_settings()
-        api_key = s.get("zenex_api_key", "N/A")
-        base_url = s.get("zenex_base_url", "N/A")
+        api_key = s.get("nxv_api_key", "N/A")
+        base_url = s.get("nxv_base_url", "N/A")
         services = ", ".join(s.get("allowed_services", []))
         otp_link = s.get("otp_group_url", "N/A")
         force_ch = s.get("force_join_channel") or "Disabled"
         otp_chat = s.get("otp_group_chat_id") or "Not set"
         msg = (
-            f"📡 <b>ZENEX PANEL CONFIGURATION</b>\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📡 <b>NXV PANEL CONFIGURATION</b>\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"<blockquote>🔑 API KEY: <code>{html.escape(api_key[:30])}...</code></blockquote>\n"
             f"<blockquote>🌐 BASE URL: <code>{html.escape(base_url)}</code></blockquote>\n"
             f"<blockquote>📋 ALLOWED SERVICES:\n{html.escape(services)}</blockquote>\n"
@@ -3387,7 +3278,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<blockquote>📢 FORCE CHANNEL: {html.escape(str(force_ch))}</blockquote>\n"
             f"<blockquote>📋 OTP CHAT ID: <code>{otp_chat}</code></blockquote>"
         )
-        await update.message.reply_text(msg, parse_mode="HTML", reply_markup=zenex_config_keyboard())
+        await update.message.reply_text(msg, parse_mode="HTML", reply_markup=nxv_config_keyboard())
         return
 
     # ==================== SERVICE MANAGEMENT HANDLERS ====================
@@ -3409,7 +3300,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(msg, parse_mode="HTML", reply_markup=service_management_keyboard())
         return
 
-    # ── ADD SERVICE: Step 1 — Service Name ──
     if text == "ADD SERVICE" and context.user_data.get("service_mgmt_mode") == "main" and is_admin(uid):
         context.user_data["service_mgmt_mode"] = "add_name"
         await update.message.reply_text(
@@ -3431,7 +3321,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML", reply_markup=cancel_keyboard())
         return
 
-    # ── ADD SERVICE: DONE — save service (must be checked BEFORE add_country handler) ──
     if text == "DONE" and context.user_data.get("service_mgmt_mode") == "add_country" and is_admin(uid):
         svc_name = context.user_data.get("new_svc_name")
         countries_done = context.user_data.get("new_svc_countries", [])
@@ -3454,7 +3343,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop(k, None)
         return
 
-    # ── ADD SERVICE: Step 2 — Country Name ──
     if context.user_data.get("service_mgmt_mode") == "add_country" and is_admin(uid):
         country_name = text.strip().title()
         context.user_data["new_svc_cur_country"] = country_name
@@ -3478,11 +3366,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML", reply_markup=cancel_keyboard())
         return
 
-    # ── ADD SERVICE: Step 3 — Ranges for that country ──
     if context.user_data.get("service_mgmt_mode") == "add_range" and is_admin(uid):
         raw_ranges = [r.strip().upper() for r in text.split(",") if r.strip()]
         country_name = context.user_data.get("new_svc_cur_country", "Unknown")
-        # Detect flag from first range
         flag, detected = "🌍", country_name
         if raw_ranges:
             import re as _re
@@ -3538,7 +3424,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["service_mgmt_mode"] = "main"
         return
 
-    # Force join check for regular users
     if not is_admin(uid):
         if not await check_force_join(update, context):
             return
@@ -3607,7 +3492,6 @@ async def leaderboard_command_slash(update: Update, context: ContextTypes.DEFAUL
 # ==================== START & CALLBACK SECTION ====================
 
 async def check_force_join(update, context):
-    """Returns True if user is allowed to proceed. False if they need to join first."""
     s = load_settings()
     channel = s.get("force_join_channel")
     if not channel:
@@ -3691,7 +3575,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("🚫 YOU ARE BANNED 🚫")
         return
 
-    # Admin support reply button.
     if data.startswith("support_reply_"):
         if not is_admin(uid):
             await query.answer("Only admins can reply to support messages.", show_alert=True)
@@ -3710,31 +3593,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ==================== SWITCH PANEL CALLBACKS ====================
-    if data == "set_panel_zenex" or data == "set_panel_nxv":
-        if not is_admin(uid):
-            await query.answer("Admin access required.", show_alert=True)
-            return
-        new_panel = "zenex" if data.endswith("zenex") else "nxv"
-        s = load_settings()
-        s["active_panel"] = new_panel
-        save_settings(s)
-        # invalidate cache so ranges reload for the new panel
-        _ranges_cache["data"] = None
-        _ranges_cache["updated_at"] = 0
-        await query.answer(f"✅ Switched to {new_panel.upper()}", show_alert=True)
-        await query.message.edit_text(
-            f"✅ <b>ACTIVE PANEL SET TO {new_panel.upper()}</b>\n\n"
-            f"<blockquote>Ranges will reload on next request.</blockquote>",
-            parse_mode="HTML",
-        )
-        return
-
-    if data == "set_panel_back":
-        await query.message.edit_text("🔙 Back to admin panel.")
-        return
-
-    # ZENEXA — APP SELECTION
     if data.startswith("sel_app_"):
         app_name = data[8:]
         top = context.user_data.get("top_ranges_by_app") or (_ranges_cache.get("data") or {})
@@ -3769,7 +3627,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
         return
 
-    # ZENEXA — RANGE SELECTION
     if data.startswith("sel_rng_"):
         idx = int(data[8:])
         ranges = context.user_data.get("sel_ranges", [])
@@ -3779,7 +3636,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         asyncio.create_task(fast_allocate_number(query, context, ranges[idx], app_name))
         return
 
-    # CUSTOM RANGE
     if data == "custom_range":
         context.user_data["mode"] = "custom_range"
         await query.message.edit_text(
@@ -3794,7 +3650,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]]))
         return
 
-    # MANUAL SERVICE — Step 1: show countries
     if data.startswith("manual_svc_"):
         idx = int(data[len("manual_svc_"):])
         s = load_settings()
@@ -3831,7 +3686,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # MANUAL SERVICE — Step 2: country selected → directly allocate number
     if data.startswith("manual_cnt_"):
         parts = data.split("_")
         svc_idx = int(parts[2])
@@ -3854,7 +3708,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         asyncio.create_task(fast_allocate_number(query, context, range_text, svc_name))
         return
 
-    # MANUAL SERVICE — Step 3: range selected → allocate number
     if data.startswith("manual_rng_"):
         parts = data.split("_")
         svc_idx = int(parts[2])
@@ -3875,12 +3728,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         asyncio.create_task(fast_allocate_number(query, context, range_text, svc_name))
         return
 
-    # BACK TO APP LIST
     if data in ("back_apps", "back_services"):
         top = context.user_data.get("top_ranges_by_app") or (_ranges_cache.get("data") or {})
         manual_rows = build_manual_service_buttons()
-        zenex_rows = build_app_buttons_from_cache(top) if top else []
-        all_rows = zenex_rows + manual_rows
+        api_rows = build_app_buttons_from_cache(top) if top else []
+        all_rows = api_rows + manual_rows
         all_rows.append([InlineKeyboardButton("\u2699\ufe0f CUSTOM RANGE", callback_data="custom_range",
                                                api_kwargs={"style": "primary"})])
         msg = f'{get_tg_emoji("get_number_btn")} <b>SELECT APP TO GET NUMBER</b>\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501'
@@ -3900,7 +3752,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await process_numbers(update, context, r_text, 1)
         return
 
-    # WITHDRAW
     if data == "withdraw_start":
         balance = get_user(uid)['balance']
         min_withdraw = get_min_withdraw()
@@ -3951,7 +3802,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await admin_reject_withdraw(update, context, data.replace("admin_reject_", ""))
         return
 
-    # COPY / MISC CALLBACKS
     if data.startswith("copy_id_"):
         await query.answer(f"✅ Copied ID: {data.replace('copy_id_', '')}", show_alert=True)
         return
