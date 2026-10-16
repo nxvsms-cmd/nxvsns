@@ -28,8 +28,8 @@ CONFIG_ADMIN_ID = 1849126202
 CONFIG_OTP_GROUP_ID = -1003997282815
 
 # ==================== NXV SMS PANEL CONFIGURATION ====================
-CONFIG_NXV_API_KEY = "nxv_live_mv5kuqto_b6dngqj4ktmaeehq"
-CONFIG_NXV_BASE_URL = "https://ais-dev-pyu5bqikw5ft5wouqv6jih-600117030330.asia-southeast1.run.app"
+CONFIG_NXV_API_KEY = "nxv_live_mv9kzuzr_gveqtihynsp6dqyu"
+CONFIG_NXV_BASE_URL = "https://nxv-sms.vercel.app"
 
 try:
     from telegram import CopyTextButton
@@ -304,7 +304,7 @@ def get_api_headers(api_key):
     }
 
 # ==================== WELCOME MESSAGE ====================
-WELCOME_MESSAGE = """✨ 𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗧𝗢 NHBD BOT🚀 ✨ 
+WELCOME_MESSAGE = """✨ 𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗧𝗢 nxv BOT🚀 ✨ 
 ━━━━━━━━━━━━━━━━━━━━━━
 🚀 Enjoy Premium Quality Service 🚀"""
 
