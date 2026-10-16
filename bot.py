@@ -29,7 +29,7 @@ CONFIG_OTP_GROUP_ID = -1003997282815
 
 # ==================== NXV SMS PANEL CONFIGURATION ====================
 CONFIG_NXV_API_KEY = "nxv_live_mv9kzuzr_gveqtihynsp6dqyu"
-CONFIG_NXV_BASE_URL = "https://nxv-sms.vercel.app"
+CONFIG_NXV_BASE_URL = "https://nxv-sms.vercel.appkk"
 
 try:
     from telegram import CopyTextButton
